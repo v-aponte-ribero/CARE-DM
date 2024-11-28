@@ -267,24 +267,26 @@ ps.val <- Reduce(`+`, lapply(pseudos, `[[`, "pseudovalue"))/n_imp
 ps.fit <- Reduce(`+`, lapply(smooth_pseudos, `[[`, "fit"))/n_imp
 ps.df <- Reduce(`+`, lapply(smooth_pseudos, `[[`, "df"))/n_imp
 ps.se <- Reduce(`+`, lapply(smooth_pseudos, `[[`, "se.fit"))/n_imp
-predicted.competing.1 <- lapply(pred.5y,function(x)log(-log(1-x)))
-predicted.competing.1 <- 1-exp(-exp(Reduce(`+`, predicted.competing.1)/n_imp))
+predicted.competing.1 <- lapply(pred.5y,function(x)log(x/(1-x)))
+predicted.competing.1 <- exp(Reduce(`+`, predicted.competing.1)/n_imp)/
+  (1+exp(Reduce(`+`, predicted.competing.1)/n_imp))
 
 centile_LP <- cut(predicted.competing.1 ,
-                  breaks=quantile(predicted.competing.1 , prob = seq(0,1,0.2)),
-                  labels=c(1:5),include.lowest=TRUE)
+                  breaks=quantile(predicted.competing.1 , prob = seq(0,1,0.1)),
+                  labels=c(1:10),include.lowest=TRUE)
 obj <- summary(survfit(Surv(TTE_CVDDeath, event) ~ centile_LP, 
                        data = listDF[[1]]), 
                times = 5*12)
 aj <- data.frame(
-  "centile_LP" = 1:5,
+  "centile_LP" = 1:10,
   "obs" = obj$pstate[, 2], 
   "se" = obj$std.err[, 2])
 
 pts <- data.frame(pred=predicted.competing.1,centile_LP=as.integer(centile_LP))
 pts <- pts %>%
   group_by(centile_LP) %>%
-  summarise(mean.pred=mean(pred))
+  summarise(mean.pred=mean(pred),
+            sd.pred=sd(pred))
 pts <- pts %>% left_join(aj)
 
 spike_bounds <- c(-0.075, 0)
@@ -323,12 +325,14 @@ segments(
   x0 = bins[freqs > 0], 
   y0 = spike_bounds[1], 
   x1 = bins[freqs > 0], 
-  y1 = freqs_rescaled
+  y1 = freqs_rescaled,
+       lwd=1.2
 )
-points(pts$mean.pred, pts$obs,pch=16)
+points(pts$mean.pred, pts$obs,pch=20)
 arrows(x0=pts$mean.pred, y0=pts$obs-1.96*pts$se, x1=pts$mean.pred, y1=pts$obs+1.96*pts$se, code=3, angle=90, length=0.1, lwd=1)
+arrows(x0=pts$mean.pred-pts$sd.pred, y0=pts$obs, x1=pts$mean.pred+pts$sd.pred, y1=pts$obs, code=3, angle=90, length=0.1, lwd=1)
 
-
+                                
 #Kaplan-Meier curves of risk groups
 
 ci_fit <- list()
@@ -734,8 +738,8 @@ cv.cal.slope <- pool_cal(est=cv.competing[,5],
                          se=cv.competing[,6],
                          n=n_pt)
 
-cv.cindx.W <- pool_cindx(cindx=cv.competing[,9],
-                         se=cv.competing[,10],
+cv.cindx.W <- pool_cindx(cindx=cv.competing[,7],
+                         se=cv.competing[,8],
                          n=n_pt,
                          method="W")
 
@@ -894,9 +898,8 @@ func.antilogit <- function(x){exp(x)/(1+exp(x))}
 meta.Wolberc <- metagen(TE=car::logit(res.IECV$Wolber.s.C.index.Estimate),
                         seTE=res.IECV$Wolber.s.C.index.logitSE,
                         studlab=res.IECV$NA.,
-                        subset=c(1,3,4),
-                        title="Calibration slope",
-                        n.e = c(2860,236,386,3461),
+                        title="C-index",
+                        n.e = c(2860,386,3461),
                         func.backtransf = func.antilogit
 )
 
